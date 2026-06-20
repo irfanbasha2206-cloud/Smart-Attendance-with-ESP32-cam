@@ -1,0 +1,175 @@
+{% extends "base_auth.html" %}
+{% block title %}Register — SmartAttend{% endblock %}
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <div class="auth-logo">
+    <div class="logo-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+    </div>
+    <h1>Create Account</h1>
+    <p>Register with face ID for auto-attendance</p>
+  </div>
+
+  <form method="POST" action="{{ url_for('register') }}" class="auth-form" id="regForm">
+    <input type="hidden" name="face_data" id="faceDataInput">
+
+    <div class="reg-grid">
+      <div class="reg-fields">
+        <div class="form-group">
+          <label>Full Name</label>
+          <div class="input-wrap">
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <input type="text" name="fullname" placeholder="John Doe" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Email Address</label>
+          <div class="input-wrap">
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <input type="email" name="email" placeholder="you@company.com" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <div class="input-wrap">
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" name="password" placeholder="Min 6 characters" required id="pw1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Confirm Password</label>
+          <div class="input-wrap">
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" name="confirm_password" placeholder="Repeat password" required id="pw2">
+          </div>
+        </div>
+      </div>
+
+      <div class="webcam-section">
+        <label class="webcam-label">Face Registration <span class="required-badge">Required</span></label>
+        <div class="webcam-box" id="webcamBox">
+          <video id="webcamVideo" autoplay playsinline muted></video>
+          <canvas id="snapCanvas" style="display:none"></canvas>
+          <div class="webcam-overlay" id="webcamOverlay">
+            <div class="face-guide-ring"></div>
+          </div>
+          <div class="webcam-placeholder" id="webcamPlaceholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <p>Click to enable camera</p>
+          </div>
+          <img id="snapPreview" style="display:none;width:100%;border-radius:8px;" alt="Captured face">
+        </div>
+
+        <div class="webcam-status" id="webcamStatus"></div>
+
+        <div class="webcam-controls">
+          <button type="button" class="btn-secondary" id="startCamBtn" onclick="startCamera()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Start Camera
+          </button>
+          <button type="button" class="btn-accent" id="captureBtn" onclick="capturePhoto()" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+            Capture
+          </button>
+          <button type="button" class="btn-secondary" id="retakeBtn" onclick="retakePhoto()" style="display:none">
+            ↺ Retake
+          </button>
+        </div>
+
+        <div class="face-status" id="faceStatus"></div>
+      </div>
+    </div>
+
+    <button type="submit" class="btn-primary btn-full" id="submitBtn">
+      <span>Create Account</span>
+    </button>
+  </form>
+
+  <div class="auth-footer">
+    Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+  </div>
+</div>
+
+<script>
+let stream = null;
+let faceOk = false;
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+    const video = document.getElementById('webcamVideo');
+    video.srcObject = stream;
+    document.getElementById('webcamPlaceholder').style.display = 'none';
+    document.getElementById('webcamOverlay').style.display = 'flex';
+    document.getElementById('startCamBtn').style.display = 'none';
+    document.getElementById('captureBtn').style.display = 'inline-flex';
+    setStatus('Position your face in the circle', 'info');
+  } catch (e) {
+    setStatus('Camera access denied: ' + e.message, 'error');
+  }
+}
+
+async function capturePhoto() {
+  const video = document.getElementById('webcamVideo');
+  const canvas = document.getElementById('snapCanvas');
+  canvas.width = video.videoWidth || 320;
+  canvas.height = video.videoHeight || 240;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+  setStatus('Detecting face...', 'info');
+
+  try {
+    const res = await fetch('/api/check_face', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ image: dataUrl })
+    });
+    const data = await res.json();
+    if (data.detected) {
+      document.getElementById('faceDataInput').value = dataUrl;
+      document.getElementById('snapPreview').src = dataUrl;
+      document.getElementById('snapPreview').style.display = 'block';
+      document.getElementById('webcamVideo').style.display = 'none';
+      document.getElementById('webcamOverlay').style.display = 'none';
+      document.getElementById('captureBtn').style.display = 'none';
+      document.getElementById('retakeBtn').style.display = 'inline-flex';
+      if (stream) { stream.getTracks().forEach(t => t.stop()); }
+      faceOk = true;
+      setStatus('✅ Face detected and captured!', 'success');
+    } else {
+      setStatus('❌ No face detected — please center your face and try again', 'error');
+    }
+  } catch (e) {
+    setStatus('Error: ' + e.message, 'error');
+  }
+}
+
+function retakePhoto() {
+  document.getElementById('faceDataInput').value = '';
+  document.getElementById('snapPreview').style.display = 'none';
+  document.getElementById('webcamVideo').style.display = 'block';
+  document.getElementById('captureBtn').style.display = 'inline-flex';
+  document.getElementById('retakeBtn').style.display = 'none';
+  document.getElementById('webcamOverlay').style.display = 'flex';
+  faceOk = false;
+  startCamera();
+  setStatus('', '');
+}
+
+function setStatus(msg, kind) {
+  const el = document.getElementById('webcamStatus');
+  el.textContent = msg;
+  el.className = 'webcam-status ' + kind;
+}
+
+document.getElementById('regForm').addEventListener('submit', function(e) {
+  const pw1 = document.getElementById('pw1').value;
+  const pw2 = document.getElementById('pw2').value;
+  if (pw1 !== pw2) { e.preventDefault(); alert('Passwords do not match.'); return; }
+  if (!document.getElementById('faceDataInput').value) {
+    e.preventDefault(); alert('Please capture your face photo before registering.'); return;
+  }
+});
+</script>
+{% endblock %}

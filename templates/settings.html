@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Settings — SmartAttend{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h2 class="page-h2">System Settings</h2>
+    <p class="page-sub">Configure ESP32-CAM and detection options</p>
+  </div>
+</div>
+
+<div class="settings-grid">
+
+  <!-- ESP32 Config -->
+  <div class="card">
+    <div class="card-header">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+        ESP32-CAM Configuration
+      </h3>
+    </div>
+    <form method="POST" action="{{ url_for('settings') }}" class="settings-form" id="settingsForm">
+      <div class="form-group">
+        <label>ESP32-CAM IP Address</label>
+        <div class="input-wrap">
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <input type="text" name="esp32_ip" value="{{ config.ESP32_IP }}" placeholder="192.168.1.100" id="ipInput">
+        </div>
+        <div class="field-hint">The IP address of your ESP32-CAM device on the local network</div>
+      </div>
+
+      <div class="form-group">
+        <label>Detection Model</label>
+        <div class="select-wrap">
+          <select name="detection_model" id="modelSelect">
+            <option value="hog" {% if config.DETECTION_MODEL == 'hog' %}selected{% endif %}>HOG (CPU — Fast)</option>
+            <option value="cnn" {% if config.DETECTION_MODEL == 'cnn' %}selected{% endif %}>CNN (GPU — Accurate)</option>
+          </select>
+        </div>
+        <div class="field-hint">HOG is recommended unless you have a CUDA GPU available</div>
+      </div>
+
+      <div class="form-group">
+        <label>Process Every N Frames</label>
+        <div class="input-wrap">
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <input type="number" name="process_every" value="{{ config.PROCESS_EVERY }}" min="1" max="10" placeholder="2">
+        </div>
+        <div class="field-hint">Higher = faster stream, lower accuracy. Recommended: 2</div>
+      </div>
+
+      <div class="form-group">
+        <label>Fetch Timeout (seconds)</label>
+        <div class="input-wrap">
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <input type="number" name="fetch_timeout" value="{{ config.FETCH_TIMEOUT }}" min="1" max="30" placeholder="3">
+        </div>
+        <div class="field-hint">Seconds to wait before marking ESP32 as offline</div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="9 11 12 14 22 4"/></svg>
+          Save Settings
+        </button>
+        <button type="button" class="btn-secondary" onclick="testConnection()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Test ESP32
+        </button>
+      </div>
+    </form>
+
+    <div class="test-result" id="testResult" style="display:none"></div>
+  </div>
+
+  <!-- ESP32 Status -->
+  <div class="card">
+    <div class="card-header">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Connection Status
+      </h3>
+    </div>
+    <div class="esp-status-panel" id="espStatusPanel">
+      <div class="esp-status-icon" id="espStatusIcon">
+        <div class="pulse-ring"></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+      </div>
+      <div class="esp-status-text" id="espStatusText">Checking...</div>
+      <div class="esp-status-sub" id="espStatusSub">Target: {{ config.ESP32_IP }}</div>
+
+      <div class="esp-detail-grid" id="espDetailGrid" style="display:none">
+        <div class="esp-detail">
+          <span class="detail-label">FPS</span>
+          <span class="detail-val" id="detailFps">—</span>
+        </div>
+        <div class="esp-detail">
+          <span class="detail-label">Frames</span>
+          <span class="detail-val" id="detailFrames">—</span>
+        </div>
+        <div class="esp-detail">
+          <span class="detail-label">Faces</span>
+          <span class="detail-val" id="detailFaces">—</span>
+        </div>
+        <div class="esp-detail">
+          <span class="detail-label">Live</span>
+          <span class="detail-val" id="detailFaceCount">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick connection guide -->
+    <div class="connection-guide">
+      <h4>ESP32-CAM Setup</h4>
+      <ol class="guide-steps">
+        <li>Flash MicroPython firmware onto your ESP32-CAM</li>
+        <li>Upload <code>main.py</code> via Thonny IDE</li>
+        <li>Set your WiFi SSID/password in <code>main.py</code></li>
+        <li>Find the IP printed in the serial console</li>
+        <li>Enter that IP above and click Test</li>
+      </ol>
+      <div class="guide-endpoints">
+        <div class="endpoint"><code>GET /capture</code> → JPEG frame</div>
+        <div class="endpoint"><code>GET /health</code> → Status JSON</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin credentials -->
+  <div class="card">
+    <div class="card-header">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Default Admin Credentials
+      </h3>
+    </div>
+    <div class="cred-box">
+      <div class="cred-row">
+        <span class="cred-label">Email</span>
+        <code class="cred-val">admin@attend.com</code>
+      </div>
+      <div class="cred-row">
+        <span class="cred-label">Password</span>
+        <code class="cred-val">admin123</code>
+      </div>
+      <div class="cred-note">
+        ⚠ Change this password in production by updating the hash in the database.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+async function testConnection() {
+  const ip = document.getElementById('ipInput').value;
+  const result = document.getElementById('testResult');
+  result.style.display = 'block';
+  result.innerHTML = '<div class="flash flash-info">Testing connection to ' + ip + '...</div>';
+  try {
+    const data = await fetch('/esp32_status').then(r=>r.json());
+    if (data.reachable) {
+      result.innerHTML = '<div class="flash flash-success">✅ ESP32 is reachable at ' + ip + '</div>';
+    } else {
+      result.innerHTML = '<div class="flash flash-danger">❌ Cannot reach ESP32: ' + (data.error||'No response') + '</div>';
+    }
+  } catch(e) {
+    result.innerHTML = '<div class="flash flash-danger">❌ Error: ' + e.message + '</div>';
+  }
+}
+
+async function pollStats() {
+  const stats = await fetch('/esp_stats').then(r=>r.json()).catch(()=>null);
+  if (!stats) return;
+  const icon = document.getElementById('espStatusIcon');
+  const txt = document.getElementById('espStatusText');
+  const sub = document.getElementById('espStatusSub');
+  const grid = document.getElementById('espDetailGrid');
+
+  if (stats.esp32_online) {
+    icon.className = 'esp-status-icon online';
+    txt.textContent = 'ESP32 Online';
+    txt.style.color = 'var(--green)';
+    grid.style.display = 'grid';
+    document.getElementById('detailFps').textContent = stats.fps;
+    document.getElementById('detailFrames').textContent = stats.frames_processed;
+    document.getElementById('detailFaces').textContent = stats.faces_detected;
+    document.getElementById('detailFaceCount').textContent = stats.face_count_current;
+  } else {
+    icon.className = 'esp-status-icon offline';
+    txt.textContent = 'ESP32 Offline';
+    txt.style.color = 'var(--red)';
+    if (stats.last_error) sub.textContent = 'Error: ' + stats.last_error.slice(0,60);
+    grid.style.display = 'none';
+  }
+}
+pollStats(); setInterval(pollStats, 3000);
+</script>
+{% endblock %}

@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SmartAttend{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h2 class="page-h2">Admin Dashboard</h2>
+    <p class="page-sub">Overview of all employee attendance</p>
+  </div>
+  <a href="/export_csv" class="btn-secondary">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Export CSV
+  </a>
+</div>
+
+<!-- Stat cards -->
+<div class="stats-row" id="statsRow">
+  <div class="stat-card animate-in">
+    <div class="stat-icon stat-blue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </div>
+    <div><div class="stat-value" id="totalUsers">—</div><div class="stat-label">Total Employees</div></div>
+  </div>
+  <div class="stat-card animate-in" style="animation-delay:.07s">
+    <div class="stat-icon stat-green">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    </div>
+    <div><div class="stat-value" id="presentToday">—</div><div class="stat-label">Present Today</div></div>
+  </div>
+  <div class="stat-card animate-in" style="animation-delay:.14s">
+    <div class="stat-icon stat-red">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    </div>
+    <div><div class="stat-value" id="absentToday">—</div><div class="stat-label">Absent Today</div></div>
+  </div>
+  <div class="stat-card animate-in" style="animation-delay:.21s">
+    <div class="stat-icon stat-purple">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    <div><div class="stat-value" id="totalRecords">—</div><div class="stat-label">Total Records</div></div>
+  </div>
+</div>
+
+<!-- Charts + Users -->
+<div class="dash-grid">
+
+  <!-- Weekly chart -->
+  <div class="card">
+    <div class="card-header"><h3>Weekly Attendance</h3></div>
+    <div class="chart-wrap" id="weeklyChart">
+      <div class="chart-loading">Loading chart...</div>
+    </div>
+  </div>
+
+  <!-- Attendance rate donut -->
+  <div class="card">
+    <div class="card-header"><h3>Today's Rate</h3></div>
+    <div class="donut-wrap">
+      <div class="donut-container">
+        <svg class="donut-svg" viewBox="0 0 120 120">
+          <circle class="donut-ring" cx="60" cy="60" r="46"/>
+          <circle class="donut-segment" cx="60" cy="60" r="46" id="donutSeg"/>
+        </svg>
+        <div class="donut-label">
+          <div class="donut-pct" id="donutPct">—</div>
+          <div class="donut-sub">Present</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Employee table -->
+<div class="card">
+  <div class="card-header">
+    <h3>Employee Attendance</h3>
+    <div class="input-wrap" style="max-width:200px">
+      <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="empSearch" placeholder="Search..." oninput="filterEmployees()">
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="attend-table">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Email</th>
+          <th>Days Present</th>
+          <th>Rate</th>
+          <th>Last Seen</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="empBody">
+        <tr><td colspan="6" class="loading-row">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let allUsers = [];
+
+async function loadDashboard() {
+  const data = await fetch('/api/dashboard_stats').then(r=>r.json()).catch(()=>null);
+  if (!data) return;
+
+  document.getElementById('totalUsers').textContent = data.total_users;
+  document.getElementById('presentToday').textContent = data.present_today;
+  document.getElementById('absentToday').textContent = data.absent_today;
+  document.getElementById('totalRecords').textContent = data.total_records;
+
+  // Donut
+  const total = data.total_users || 1;
+  const pct = Math.round(data.present_today / total * 100);
+  const circ = 2 * Math.PI * 46;
+  const offset = circ - (pct / 100 * circ);
+  const seg = document.getElementById('donutSeg');
+  seg.style.strokeDasharray = `${circ}`;
+  seg.style.strokeDashoffset = `${offset}`;
+  seg.style.stroke = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+  document.getElementById('donutPct').textContent = pct + '%';
+
+  // Weekly chart
+  renderWeeklyChart(data.weekly);
+
+  // Employee table
+  allUsers = data.user_stats;
+  renderEmployees(allUsers);
+}
+
+function renderWeeklyChart(weekly) {
+  const max = Math.max(...weekly.map(w => w.count), 1);
+  const wrap = document.getElementById('weeklyChart');
+  wrap.innerHTML = `
+    <div class="bar-chart">
+      ${weekly.map(w => {
+        const h = Math.round(w.count / max * 100);
+        const label = w.date.slice(5);
+        return `
+          <div class="bar-col">
+            <div class="bar-val">${w.count}</div>
+            <div class="bar" style="height:${h}%"></div>
+            <div class="bar-label">${label}</div>
+          </div>`;
+      }).join('')}
+      ${weekly.length === 0 ? '<div class="chart-loading">No data yet</div>' : ''}
+    </div>`;
+}
+
+function renderEmployees(users) {
+  const tbody = document.getElementById('empBody');
+  if (!users.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No employees found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => `
+    <tr class="table-row-animate">
+      <td><div class="user-cell"><div class="avatar-sm">${u.fullname[0]}</div>${u.fullname}</div></td>
+      <td class="muted">${u.email}</td>
+      <td>${u.days_present}</td>
+      <td>
+        <div class="mini-progress">
+          <div class="mini-bar" style="width:${u.percentage}%;background:${u.percentage>=75?'var(--green)':u.percentage>=50?'var(--yellow)':'var(--red)'}"></div>
+        </div>
+        <span class="pct-text">${u.percentage}%</span>
+      </td>
+      <td class="muted">${u.last_seen === 'Never' ? '<span class="badge-gray">Never</span>' : u.last_seen}</td>
+      <td>
+        <button class="btn-danger-sm" onclick="deleteUser(${u.id}, '${u.fullname}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function filterEmployees() {
+  const q = document.getElementById('empSearch').value.toLowerCase();
+  renderEmployees(allUsers.filter(u => u.fullname.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
+}
+
+async function deleteUser(id, name) {
+  if (!confirm(`Delete ${name} and all their attendance records?`)) return;
+  const res = await fetch(`/api/users/${id}`, {method:'DELETE'}).then(r=>r.json());
+  if (res.ok) { loadDashboard(); }
+  else alert(res.msg);
+}
+
+loadDashboard();
+setInterval(loadDashboard, 30000);
+</script>
+{% endblock %}

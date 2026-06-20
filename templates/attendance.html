@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Attendance — SmartAttend{% endblock %}
+{% block page_title %}Attendance{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h2 class="page-h2">Mark Attendance</h2>
+    <p class="page-sub">{{ today }}</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <div class="status-pill" id="esp32StatusPill">
+      <span class="pulse-dot"></span>
+      <span id="esp32StatusText">Checking ESP32...</span>
+    </div>
+    <div class="esp-ip-badge" title="ESP32-CAM IP Address">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      <code>{{ esp32_ip }}</code>
+      {% if session.role == 'admin' %}
+      <a href="{{ url_for('settings') }}" class="esp-ip-edit-link" title="Edit in Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit
+      </a>
+      {% else %}
+      <span class="esp-ip-note">Contact admin to change</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-icon stat-blue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    </div>
+    <div>
+      <div class="stat-value">{{ total_days }}</div>
+      <div class="stat-label">Days Present</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-green">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    </div>
+    <div>
+      <div class="stat-value">{{ percentage }}%</div>
+      <div class="stat-label">Attendance Rate</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-purple">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </div>
+    <div>
+      <div class="stat-value" id="currentTime">--:--</div>
+      <div class="stat-label">Current Time</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main grid -->
+<div class="attend-grid">
+
+  <!-- Left: ESP32 Feed + Auto-mark info -->
+  <div class="attend-left">
+    <div class="card">
+      <div class="card-header">
+        <h3>ESP32-CAM Live Feed</h3>
+        <div class="esp-info">
+          <span id="fpsLabel" class="badge-gray">-- FPS</span>
+          <span id="faceCountLabel" class="badge-green">0 Faces</span>
+        </div>
+      </div>
+      <div class="cam-container">
+        <img id="videoFeed" src="{{ url_for('video_feed') }}" alt="ESP32 Feed" class="cam-img" onerror="handleFeedError()">
+        <div class="cam-offline-msg" id="camOffline" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="40" height="40"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06A4 4 0 1 1 7.72 7.72"/></svg>
+          <p>ESP32-CAM offline</p>
+          <small>Configure IP in Settings</small>
+        </div>
+      </div>
+
+      <!-- Auto-mark box -->
+      <div class="auto-mark-box" id="autoMarkBox">
+        <div class="auto-mark-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Auto-Detected via ESP32-CAM
+        </div>
+        <div class="auto-mark-row">
+          <div class="auto-mark-field">
+            <label>Recognized User</label>
+            <div class="auto-field-val" id="autoUser">—</div>
+          </div>
+          <div class="auto-mark-field">
+            <label>Marked At</label>
+            <div class="auto-field-val" id="autoTime">—</div>
+          </div>
+          <div class="auto-mark-field">
+            <label>Status</label>
+            <div class="auto-field-val" id="autoStatus"><span class="badge-gray">Waiting...</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Manual mark + Today status -->
+  <div class="attend-right">
+
+    <!-- Logged-in user box -->
+    <div class="card user-info-box">
+      <div class="card-header"><h3>Session Info</h3></div>
+      <div class="user-info-grid">
+        <div class="user-info-field">
+          <label>Logged In As</label>
+          <div class="user-field-val">{{ session.fullname }}</div>
+        </div>
+        <div class="user-info-field">
+          <label>Email</label>
+          <div class="user-field-val">{{ session.email }}</div>
+        </div>
+        <div class="user-info-field">
+          <label>Role</label>
+          <div class="user-field-val"><span class="role-badge role-{{ session.role }}">{{ session.role|capitalize }}</span></div>
+        </div>
+        <div class="user-info-field">
+          <label>Login Time</label>
+          <div class="user-field-val" id="loginTime">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Today's attendance status -->
+    <div class="card">
+      <div class="card-header"><h3>Today's Status</h3></div>
+      {% if today_record %}
+      <div class="today-marked">
+        <div class="marked-icon">✅</div>
+        <div class="marked-info">
+          <div class="marked-title">Attendance Marked</div>
+          <div class="marked-time">{{ today_record['timestamp'] }}</div>
+          <div class="marked-by">via {{ today_record['marked_by']|upper }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="today-unmarked">
+        <div class="unmarked-icon">⏳</div>
+        <p>Not yet marked for today</p>
+        <button class="btn-primary" id="markBtn" onclick="markAttendance()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Mark My Attendance
+        </button>
+      </div>
+      <div class="mark-result" id="markResult" style="display:none"></div>
+      {% endif %}
+    </div>
+
+    <!-- Attendance progress -->
+    <div class="card">
+      <div class="card-header"><h3>My Attendance</h3></div>
+      <div class="progress-section">
+        <div class="progress-header">
+          <span>{{ total_days }} days present</span>
+          <span class="pct-val">{{ percentage }}%</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" style="width: {{ percentage }}%; background: {% if percentage >= 75 %}var(--green){% elif percentage >= 50 %}var(--yellow){% else %}var(--red){% endif %}"></div>
+        </div>
+        <div class="progress-hint">
+          {% if percentage >= 75 %}<span class="text-green">✓ Good standing</span>
+          {% elif percentage >= 50 %}<span class="text-yellow">⚠ Below average</span>
+          {% else %}<span class="text-red">✗ Needs improvement</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('currentTime').textContent = now.toLocaleTimeString('en-IN', {hour12: false});
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// Login time
+document.getElementById('loginTime').textContent = new Date().toLocaleTimeString('en-IN', {hour12: true});
+
+// Manual mark
+async function markAttendance() {
+  const btn = document.getElementById('markBtn');
+  btn.disabled = true; btn.textContent = 'Marking...';
+  const res = await fetch('/attendance/mark', {method:'POST'});
+  const data = await res.json();
+  const result = document.getElementById('markResult');
+  result.style.display = 'block';
+  if (data.ok) {
+    result.innerHTML = `<div class="today-marked"><div class="marked-icon">✅</div><div class="marked-info"><div class="marked-title">Attendance Marked!</div><div class="marked-time">${data.time}</div><div class="marked-by">via MANUAL</div></div></div>`;
+    btn.closest('.today-unmarked').style.display = 'none';
+  } else {
+    result.innerHTML = `<div class="flash flash-warning">${data.msg}</div>`;
+    btn.disabled = false; btn.textContent = 'Mark My Attendance';
+  }
+}
+
+// ESP32 status polling
+async function pollESP32() {
+  try {
+    const stats = await fetch('/esp_stats').then(r=>r.json());
+    const pill = document.getElementById('esp32StatusPill');
+    const txt = document.getElementById('esp32StatusText');
+    document.getElementById('fpsLabel').textContent = stats.fps + ' FPS';
+    document.getElementById('faceCountLabel').textContent = stats.face_count_current + ' Face(s)';
+    if (stats.esp32_online) {
+      pill.className = 'status-pill online'; txt.textContent = 'ESP32 Online';
+    } else {
+      pill.className = 'status-pill offline'; txt.textContent = 'ESP32 Offline';
+    }
+  } catch(e) {}
+}
+setInterval(pollESP32, 2000); pollESP32();
+
+// Poll notifications for auto-mark display
+let lastNotifCount = 0;
+async function pollAutoMark() {
+  const res = await fetch('/api/recent_notifications').then(r=>r.json()).catch(()=>[]);
+  if (res.length > lastNotifCount) {
+    const newest = res[0];
+    if (newest && newest.msg.includes('ESP32-CAM')) {
+      const parts = newest.msg.split(' at ');
+      document.getElementById('autoUser').textContent = newest.msg.replace('✅ ','').split(' marked')[0];
+      document.getElementById('autoTime').textContent = parts[1] || '—';
+      document.getElementById('autoStatus').innerHTML = '<span class="badge-green">✅ Marked</span>';
+    }
+    lastNotifCount = res.length;
+  }
+}
+setInterval(pollAutoMark, 2000);
+
+function handleFeedError() {
+  document.getElementById('videoFeed').style.display = 'none';
+  document.getElementById('camOffline').style.display = 'flex';
+}
+</script>
+{% endblock %}

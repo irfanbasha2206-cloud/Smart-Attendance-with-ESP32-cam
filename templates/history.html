@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}History — SmartAttend{% endblock %}
+{% block page_title %}Attendance History{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h2 class="page-h2">Attendance History</h2>
+    <p class="page-sub">View and filter attendance records</p>
+  </div>
+  {% if session.role == 'admin' %}
+  <a href="/export_csv" id="exportBtn" class="btn-secondary">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Export CSV
+  </a>
+  {% endif %}
+</div>
+
+<!-- Filters -->
+<div class="card filters-card">
+  <div class="filter-row">
+    {% if session.role == 'admin' %}
+    <div class="filter-group">
+      <label>Search User</label>
+      <div class="input-wrap">
+        <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="filterUser" placeholder="Name or email..." oninput="loadHistory()">
+      </div>
+    </div>
+    {% endif %}
+    <div class="filter-group">
+      <label>Filter by Date</label>
+      <div class="input-wrap">
+        <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <input type="date" id="filterDate" oninput="loadHistory()">
+      </div>
+    </div>
+    <button class="btn-secondary" onclick="clearFilters()">Clear</button>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+  <div class="table-wrap">
+    <table class="attend-table" id="historyTable">
+      <thead>
+        <tr>
+          {% if session.role == 'admin' %}<th>Name</th><th>Email</th>{% endif %}
+          <th>Date</th>
+          <th>Time</th>
+          <th>Marked By</th>
+        </tr>
+      </thead>
+      <tbody id="historyBody">
+        <tr><td colspan="5" class="loading-row">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<script>
+let currentPage = 1;
+const isAdmin = {{ 'true' if session.role == 'admin' else 'false' }};
+
+async function loadHistory(page = 1) {
+  currentPage = page;
+  const user = document.getElementById('filterUser')?.value || '';
+  const date = document.getElementById('filterDate')?.value || '';
+  const params = new URLSearchParams({ page, user, date });
+  if (isAdmin) {
+    document.getElementById('exportBtn').href = `/export_csv?user=${user}&date=${date}`;
+  }
+
+  const data = await fetch('/api/history?' + params).then(r => r.json()).catch(() => null);
+  if (!data) return;
+
+  const tbody = document.getElementById('historyBody');
+  if (!data.records.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-row">No records found</td></tr>`;
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = data.records.map(r => `
+    <tr class="table-row-animate">
+      ${isAdmin ? `<td><div class="user-cell"><div class="avatar-sm">${r.fullname[0]}</div>${r.fullname}</div></td><td class="muted">${r.email}</td>` : ''}
+      <td>${r.date}</td>
+      <td>${r.timestamp.split(' ')[1] || r.timestamp}</td>
+      <td><span class="marked-by-badge ${r.marked_by === 'esp32' ? 'badge-blue' : 'badge-gray'}">${r.marked_by.toUpperCase()}</span></td>
+    </tr>
+  `).join('');
+
+  // Pagination
+  const pag = document.getElementById('pagination');
+  if (data.pages <= 1) { pag.innerHTML = ''; return; }
+  let html = `<span class="pag-info">Page ${data.page} of ${data.pages} (${data.total} records)</span><div class="pag-btns">`;
+  if (data.page > 1) html += `<button onclick="loadHistory(${data.page-1})">← Prev</button>`;
+  for (let p = Math.max(1, data.page-2); p <= Math.min(data.pages, data.page+2); p++) {
+    html += `<button class="${p === data.page ? 'pag-active' : ''}" onclick="loadHistory(${p})">${p}</button>`;
+  }
+  if (data.page < data.pages) html += `<button onclick="loadHistory(${data.page+1})">Next →</button>`;
+  html += '</div>';
+  pag.innerHTML = html;
+}
+
+function clearFilters() {
+  if (document.getElementById('filterUser')) document.getElementById('filterUser').value = '';
+  if (document.getElementById('filterDate')) document.getElementById('filterDate').value = '';
+  loadHistory();
+}
+
+loadHistory();
+</script>
+{% endblock %}
